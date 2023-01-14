@@ -1,0 +1,309 @@
+---
+title: "Final Project Code: Profit Question"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(car)
+library(modelr)       #Helpful Functions in Modeling
+library(purrr)
+library(broom)
+library(glmnet)
+# Import Data Below
+#movies=read_csv("tmdb_5000_movies.csv")
+library(readr)
+movies=read_csv("~/tmdb_5000_movies.csv")
+# Prep data
+movies2<-movies%>%
+  select(-tagline, -overview, -homepage, -keywords)
+
+movies3<-movies2%>%
+  mutate(action=str_detect(genres, "Action"))%>%
+  mutate(adventure=str_detect(genres, "Adventure"))%>%
+  mutate(fantasy=str_detect(genres, "Fantasy"))%>%
+  mutate(science_fiction=str_detect(genres, "Science Fiction"))%>%
+  mutate(crime=str_detect(genres, "Crime"))%>%
+  mutate(drama=str_detect(genres, "Drama"))%>%
+  mutate(thriller=str_detect(genres, "Thriller"))%>%
+  mutate(animation=str_detect(genres, "Animation"))%>%
+  mutate(family=str_detect(genres, "Family"))%>%
+  mutate(western=str_detect(genres, "Western"))%>%
+  mutate(comedy=str_detect(genres, "Comedy"))%>%
+  mutate(romance=str_detect(genres, "Romance"))%>%
+  mutate(horror=str_detect(genres, "Horror"))%>%
+  mutate(mystery=str_detect(genres, "Mystery"))%>%
+  mutate(war=str_detect(genres, "War"))%>%
+  mutate(history=str_detect(genres, "History"))%>%
+  mutate(music=str_detect(genres, "Music")) %>%
+  mutate(documentary=str_detect(genres, "Documentary")) %>%
+  mutate(foreign=str_detect(genres, "Foreign")) %>%
+  mutate(tvmovie=str_detect(genres, "TV Movie")) %>%
+  mutate(budget_millions=budget/1000000)%>%
+  mutate(revenue_millions=revenue/1000000) %>%
+  mutate(profit=revenue-budget) %>%
+  mutate(profit_millions=revenue/1000000-budget/1000000)
+
+  
+movies3$action <- as.numeric(movies3$action)
+movies3$adventure <- as.numeric(movies3$adventure)
+movies3$fantasy <- as.numeric(movies3$fantasy)
+movies3$science_fiction <- as.numeric(movies3$science_fiction)
+movies3$crime <- as.numeric(movies3$crime)
+movies3$drama <- as.numeric(movies3$drama)
+movies3$thriller <- as.numeric(movies3$thriller)
+movies3$animation <- as.numeric(movies3$animation)
+movies3$family <- as.numeric(movies3$family)
+movies3$western <- as.numeric(movies3$western)
+movies3$comedy <- as.numeric(movies3$comedy)
+movies3$romance <- as.numeric(movies3$romance)
+movies3$horror <- as.numeric(movies3$horror)
+movies3$mystery <- as.numeric(movies3$mystery)
+movies3$war <- as.numeric(movies3$war)
+movies3$history <- as.numeric(movies3$history)
+movies3$music <- as.numeric(movies3$music)
+movies3$documentary <- as.numeric(movies3$documentary)
+movies3$foreign <- as.numeric(movies3$foreign)
+movies3$tvmovie <- as.numeric(movies3$tvmovie)
+  
+movies3$year <- substr(movies3$release_date,1,4)
+
+```
+
+```{r}
+#function from: https://stackoverflow.com/questions/9500114/find-which-season-a-particular-date-belongs-to
+
+#add season variable
+getSeason <- function(DATES) {
+    WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
+    SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
+    SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
+    FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
+
+    # Convert dates from any year to 2012 dates
+    d <- as.Date(strftime(DATES, format="2012-%m-%d"))
+
+    ifelse (d >= WS | d < SE, "Winter",
+      ifelse (d >= SE & d < SS, "Spring",
+        ifelse (d >= SS & d < FE, "Summer", "Fall")))
+    }
+
+
+movies4 <- movies3 
+movies4$season <- getSeason(movies3$release_date)
+
+#add decade variable
+movies4 <- movies4 %>%
+  filter(is.na(year)==FALSE)%>%
+  mutate(decade = case_when( 
+    year %in% 1916:1919 ~ "1910",
+    year %in% 1920:1929 ~ "1920",
+    year %in% 1930:1939 ~ "1930",
+    year %in% 1940:1949 ~ "1940",
+    year %in% 1950:1959 ~ "1950",
+    year %in% 1960:1969 ~ "1960",
+    year %in% 1970:1979 ~ "1970",
+    year %in% 1980:1989 ~ "1980",
+    year %in% 1990:1999 ~ "1990",
+    year %in% 2000:2009 ~ "2000",
+    year %in% 2010:2017 ~ "2010"
+  )) 
+
+
+
+
+#production_country: I found there are around 90 countries mentioned in the production_country, so I basically categorized them in area: North America, South America, Europe, Asia, Africa and Oceania. 
+movies5 = movies4%>%
+mutate(production_countries  = str_replace_all
+       (production_countries, "[^[:alnum:]]", ""))%>%
+  mutate(production_countries  = str_replace_all
+         (production_countries, "(name)", ""))%>%
+  mutate(production_countries  = str_replace_all
+         (production_countries, "(iso)", " "))%>%
+  mutate(production_countries  = str_replace
+         (production_countries, " ", ""))%>% 
+  mutate(production_countries  = str_replace_all
+         (production_countries, "[0-9]", ""))
+for(x in 1:nrow(movies5)){
+  if(movies5$production_countries[x]==""){
+    movies5$production_countries[x]=NA
+  }
+}
+
+movies5 = movies5%>%
+          separate_rows(production_countries, sep = " ")
+
+for(x in 1: nrow(movies5)){
+  movies5$production_countries[x] = substring(movies5$production_countries[x], 3)
+}
+
+#method from: https://stackoverflow.com/questions/35962426/multiple-strings-with-str-detect-r
+
+string_NA = c("UnitedStatesofAmerica","Jamaica","Bahamas","Dominica","Canada", "DominicanRepublic","Panama")
+string_SA = c("Mexico", "Peru","Aruba", "Brazil","“Bolivia", "KyrgyzRepublic", "Indonesia","Chile", "Argentina", "Ecuador", "Colombia", "Guyana", "Guadaloupe")
+string_EU = c("UnitedKingdom", "Germany", "Italy", "Malta", "CzechRepublic", "Belgium",  "France", "Netherlands", "Spain", "Ireland", "Hungary", "Russia", "Bulgaria", "Switzerland", "BosniaandHerzegovina","Denmark","Sweden","Iceland","Romania", "Austria", "Cyprus", "Poland", "Slovenia", "Ukraine", "Norway", "Slovakia", "Finland", "Serbia", "Lithuania", "SerbiaandMontenegro", "Greece", "Portugal", "Monaco")
+string_AS =  c("China", "Japan", "India", "UnitedArabEmirates", "Taiwan", "HongKong", "Pakistan", "Philippines", "SouthKorea", "Luxembourg", "Kazakhstan", "Singapore", "Thailand", "Jordan","Turkey", "Bhutan", "Cambodia", "Israel", "Malaysia", "Lebanon", "Iran", "Afghanistan")
+string_AF =  c("Morocco", "SouthAfrica", "Tunisia","LibyanArabJamahiriya", "Nigeria", "Angola", "Egypt", "Kenya", "Cameroon")
+string_OC = c("NewZealand", "Australia", "Fiji")
+
+
+movies5 = movies5%>%
+  group_by(id)%>%
+  mutate(production_countries=paste(production_countries,collapse=","))%>%
+  ungroup()%>%
+  mutate(prod_North_America=as.numeric(str_detect(production_countries,paste(string_NA, collapse = "|"))),
+         prod_South_America=as.numeric(str_detect(production_countries,paste(string_SA, collapse = "|"))),
+         prod_Europe=as.numeric(str_detect(production_countries,paste(string_EU, collapse = "|"))),
+         prod_Asia = as.numeric(str_detect(production_countries,paste(string_AS, collapse = "|"))),
+         prod_Africa = as.numeric(str_detect(production_countries,paste(string_AF, collapse = "|"))),
+         prod_Oceania = as.numeric(str_detect(production_countries,paste(string_OC, collapse = "|"))))
+
+movies5 = distinct(movies5)
+```
+
+```{r}
+top_10 = c("Universal Pictures","Warner Bros","Columbia Pictures","Walt Disney Pictures","Marvel Studios","Paramount Pictures","20th Century Fox","RatPac-Dune Entertainment","Legendary Entertainment","Relativity Media")
+  
+movies5$top10_prodcompany = 0
+
+for(x in 1:nrow(movies5)){
+  if(str_detect(movies5$production_companies[x],paste(top_10, collapse = "|"))){
+    movies5$top10_prodcompany[x] = 1
+  }else{
+    movies5$top10_prodcompany[x] = 0
+  }
+}
+```
+
+```{r}
+#Since there are too many language in original_language column.
+freq_lan = table(movies5$original_language)
+freq_lan = freq_lan%>%
+  sort(decreasing = TRUE)
+freq_lan
+#English, French, Espanol are top 3 oringinal_language in data set.
+other_lan = c("hi","ja","it","cn","ko","ru","pt","da","sv","fa","nl","he","th","ar","cs","id","ro","ta","af","el","hu","is","ky"   ,"nb","no","pl", "ps","sl","te","tr","vi","xx","de","zh")
+movies5=movies5 %>%
+  mutate(English_mov=as.numeric(str_detect(original_language,"en")),
+         French_mov=as.numeric(str_detect(original_language,"fr")),
+         Espanol_mov=as.numeric(str_detect(original_language,"es")),
+         Spring=as.numeric(str_detect(season,"Spring")),
+         Summer=as.numeric(str_detect(season,"Summer")),
+         Fall=as.numeric(str_detect(season,"Fall")),
+         Winter=as.numeric(str_detect(season,"Winter")),
+         Decade1910 = as.numeric(str_detect(decade,"1910")),
+         Decade1920 = as.numeric(str_detect(decade,"1920")),
+         Decade1930 = as.numeric(str_detect(decade,"1930")),
+         Decade1940 = as.numeric(str_detect(decade,"1940")),
+         Decade1950 = as.numeric(str_detect(decade,"1950")),
+         Decade1960 = as.numeric(str_detect(decade,"1960")),
+         Decade1970 = as.numeric(str_detect(decade,"1970")),
+         Decade1980 = as.numeric(str_detect(decade,"1980")),
+         Decade1990 = as.numeric(str_detect(decade,"1990")),
+         Decade2000 = as.numeric(str_detect(decade,"2000")),
+         Decade2010 = as.numeric(str_detect(decade,"2010")),
+         other_lan_mov = as.numeric(str_detect(original_language,paste(other_lan, collapse = "|"))))
+head(movies5)
+
+movies6 <- movies5%>%
+  select(-budget,-genres,-id,-original_language,-original_title,-production_companies,-production_countries,-release_date,-revenue,-spoken_languages,-status, -title, -season, -decade, -year, -runtime,-budget_millions)
+
+head(movies6)
+```
+#Elastic Way
+#What predictors include in Dataset "movies6"?
+1.genre(20+ columns) 
+2.popularity 
+3.vote_average 
+4.vote_count
+5.production_countries(recategorize as different continents)
+6.original_language(en,french,es,(these are top 3 language in the dataset),other) 
+7.decade 
+8.production_companies(top10 or not)
+
+```{r}
+movies6 <- movies6 %>%
+  mutate(popularity = popularity/sd(popularity))%>%
+  mutate(vote_average = vote_average/sd(vote_average))%>%
+  mutate(vote_count = vote_count/sd(vote_count))%>%
+  mutate(profit_millions = profit_millions/sd(profit_millions))
+
+head(movies6)
+movies6 = na.omit(movies6)
+movies6 = movies6[,-c(24,25)]
+y = movies6$profit_millions
+X=model_matrix(movies6,profit_millions~.)[,-1]
+head(X)
+```
+```{r}
+set.seed(216)
+cvmod.0=cv.glmnet(y=y,x=as.matrix(X),alpha=0)
+set.seed(216)
+cvmod.25=cv.glmnet(y=y,x=as.matrix(X),alpha=0.25)
+set.seed(216)
+cvmod.5=cv.glmnet(y=y,x=as.matrix(X),alpha=0.5)
+set.seed(216)
+cvmod.75=cv.glmnet(y=y,x=as.matrix(X),alpha=0.75)
+set.seed(216)
+cvmod.1=cv.glmnet(y=y,x=as.matrix(X),alpha=1)
+
+CV.0.ERROR=cvmod.0$cvm[which(cvmod.0$lambda==cvmod.0$lambda.1se)]
+CV.25.ERROR=cvmod.25$cvm[which(cvmod.25$lambda==cvmod.25$lambda.1se)]
+CV.5.ERROR=cvmod.5$cvm[which(cvmod.5$lambda==cvmod.5$lambda.1se)]
+CV.75.ERROR=cvmod.75$cvm[which(cvmod.75$lambda==cvmod.75$lambda.1se)]
+CV.1.ERROR=cvmod.1$cvm[which(cvmod.1$lambda==cvmod.1$lambda.1se)]
+
+MOD.RESULT=tibble(alpha=c(0,0.25,0.5,0.75,1),
+                  lambda=c(cvmod.0$lambda.1se,cvmod.25$lambda.1se,
+                           cvmod.5$lambda.1se,cvmod.75$lambda.1se,
+                           cvmod.1$lambda.1se),
+                  CV.Error=c(CV.0.ERROR,CV.25.ERROR,CV.5.ERROR,
+                             CV.75.ERROR,CV.1.ERROR))
+print(MOD.RESULT)
+
+```
+```{r}
+best.alpha=MOD.RESULT$alpha[which.min(MOD.RESULT$CV.Error)]
+best.lambda=MOD.RESULT$lambda[which.min(MOD.RESULT$CV.Error)]
+best.mod=glmnet(y=y,x=as.matrix(X),nlambda=1,lambda=best.lambda,alpha=best.alpha)
+best.coef=as.tibble(as.matrix(coef(best.mod)))
+best.coef2=best.coef %>% 
+              mutate(Parameter=c("int",colnames(X))) %>%
+              rename(Estimate=s0) %>%
+              select(Parameter,Estimate)
+nonzero.best.coef=best.coef2 %>%
+                    filter(Estimate!=0)
+print(nonzero.best.coef,n=1e3)
+
+movies6$profit_millions.hat=predict(best.mod,newx=as.matrix(X))
+
+ggplot(movies6) +
+  geom_point(aes(x=profit_millions,y=profit_millions.hat),color="lightskyblue2") +
+  geom_abline(intercept=0,slope=1,linetype="dashed") +
+  theme_minimal() +
+  ylab("Predicted profit") +
+  xlab("Actual profit")
+
+ggplot(movies6) +
+  geom_histogram(aes(x=profit_millions-profit_millions.hat),fill="lightskyblue2") +
+  theme_minimal() +
+  xlab("Residuals") +
+  ylab("Frequency")
+
+```
+
+
+
+
+
+
+
+
+

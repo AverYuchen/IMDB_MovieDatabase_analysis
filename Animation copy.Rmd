@@ -1,0 +1,238 @@
+---
+title: "Exploratory Data Analysis"
+author: "STOR 320.02 Group 19"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library("readxl")
+library("RColorBrewer")
+library(boot)
+library(Hmisc)
+library(dplyr)
+
+
+
+# Import Data Below
+movies=read_csv("tmdb_5000_movies.csv")
+
+# Prep data
+movies2<-movies%>%
+  select(-production_companies, -id, -overview, -homepage, -keywords)
+
+movies3<-movies2%>%
+  mutate(action=str_detect(genres, "Action"))%>%
+  mutate(adventure=str_detect(genres, "Adventure"))%>%
+  mutate(fantasy=str_detect(genres, "Fantasy"))%>%
+  mutate(science_fiction=str_detect(genres, "Science Fiction"))%>%
+  mutate(crime=str_detect(genres, "Crime"))%>%
+  mutate(drama=str_detect(genres, "Drama"))%>%
+  mutate(thriller=str_detect(genres, "Thriller"))%>%
+  mutate(animation=str_detect(genres, "Animation"))%>%
+  mutate(family=str_detect(genres, "Family"))%>%
+  mutate(western=str_detect(genres, "Western"))%>%
+  mutate(comedy=str_detect(genres, "Comedy"))%>%
+  mutate(romance=str_detect(genres, "Romance"))%>%
+  mutate(horror=str_detect(genres, "Horror"))%>%
+  mutate(mystery=str_detect(genres, "Mystery"))%>%
+  mutate(war=str_detect(genres, "War"))%>%
+  mutate(history=str_detect(genres, "History"))%>%
+  mutate(music=str_detect(genres, "Music")) %>%
+  mutate(documentary=str_detect(genres, "Documentary")) %>%
+  mutate(foreign=str_detect(genres, "Foreign")) %>%
+  mutate(tvmovie=str_detect(genres, "TV Movie")) %>%
+  mutate(budget_millions=budget/1000000)%>%
+  mutate(revenue_millions=revenue/1000000)
+
+  
+movies3$action <- as.numeric(movies3$action)
+movies3$adventure <- as.numeric(movies3$adventure)
+movies3$fantasy <- as.numeric(movies3$fantasy)
+movies3$science_fiction <- as.numeric(movies3$science_fiction)
+movies3$crime <- as.numeric(movies3$crime)
+movies3$drama <- as.numeric(movies3$drama)
+movies3$thriller <- as.numeric(movies3$thriller)
+movies3$animation <- as.numeric(movies3$animation)
+movies3$family <- as.numeric(movies3$family)
+movies3$western <- as.numeric(movies3$western)
+movies3$comedy <- as.numeric(movies3$comedy)
+movies3$romance <- as.numeric(movies3$romance)
+movies3$horror <- as.numeric(movies3$horror)
+movies3$mystery <- as.numeric(movies3$mystery)
+movies3$war <- as.numeric(movies3$war)
+movies3$history <- as.numeric(movies3$history)
+movies3$music <- as.numeric(movies3$music)
+movies3$documentary <- as.numeric(movies3$documentary)
+movies3$foreign <- as.numeric(movies3$foreign)
+movies3$tvmovie <- as.numeric(movies3$tvmovie)
+  
+movies3$year <- substr(movies3$release_date,1,4)
+
+movies3_initial <- movies3
+
+```
+
+```{r}
+excel<- read_excel("C:/Users/muthu/Downloads/STOR 320/archive\\animation.xlsx", sheet= "Sheet1")
+anim_movies <- movies3  %>%
+  filter(animation==1)
+  newdata <- anim_movies[order(anim_movies$title),] 
+combine<- cbind(newdata, excel)
+ anim_revenue<- combine %>%
+  gather(`Pixar`:`Sony Pictures`, key= `Animation Studios`, value = `indicator`) %>%
+  filter(`indicator`==1)
+ 
+voteaverage2<-
+anim_revenue %>%
+  transmute(`Animation Studios`,
+            voteaverage2= abs(`vote_average`)) %>%
+  group_by(`Animation Studios`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(voteaverage2, na.rm=T),
+            se=sd(voteaverage2, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+
+col_scale<-colorRampPalette(c("red","orange"))(9) 
+
+ggplot(voteaverage2,aes(x =`Animation Studios`, y =avg, color = `Animation Studios`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Animation Studios`, ymin = low, ymax=high)) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  geom_boxplot() +
+  scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9])) +
+  ylab("Mean Vote Average") +
+  ggtitle("Mean Vote Average of Animation Studios") 
+
+revenue2<-
+anim_revenue %>%
+  transmute(`Animation Studios`,
+            revenue2= abs(`revenue_millions`)) %>%
+  group_by(`Animation Studios`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(revenue2, na.rm=T),
+            se=sd(revenue2, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+
+col_scale<-colorRampPalette(c("red","orange"))(9)
+
+ggplot(revenue2,aes(x =`Animation Studios`, y =avg, color = `Animation Studios`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Animation Studios`, ymin = low, ymax=high)) + scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9])) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  ylab("Mean Revenue in Millions") +
+  ggtitle("Mean Revenue of Animation Studios") 
+
+popularity2<-
+anim_revenue %>%
+  transmute(`Animation Studios`,
+            popularity2= abs(`popularity`)) %>%
+  group_by(`Animation Studios`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(popularity2, na.rm=T),
+            se=sd(popularity2, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+
+col_scale<-colorRampPalette(c("red","orange"))(9)
+
+ggplot(popularity2,aes(x =`Animation Studios`, y =avg, color = `Animation Studios`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Animation Studios`, ymin = low, ymax=high)) + scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9])) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  ylab("Mean Popularity") +
+  ggtitle("Mean Popularity of Animation Studios") 
+
+
+  
+
+```
+```{r}
+excel1<- read_excel("C:/Users/muthu/Downloads/STOR 320/archive\\animation1.xlsx", sheet= "Sheet2")
+anim_movies1 <- movies3  %>%
+  filter(documentary==1) 
+  #newdata <- anim_movies[order(anim_movies$title),] 
+combine1<- cbind(anim_movies1, excel1)
+anim_revenue1<- combine1 %>%
+  gather(`Nature/Environment`:`Corporations/Products`, key= `Documentary Genre`, value = `indicator`) %>%
+filter(`indicator`==1) 
+
+
+voteaverage<-
+anim_revenue1 %>%
+  transmute(`Documentary Genre`,
+            voteaverage= abs(`vote_average`)) %>%
+  group_by(`Documentary Genre`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(voteaverage, na.rm=T),
+            se=sd(voteaverage, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+
+col_scale<-colorRampPalette(c("#0200bd50","#FF000050"))(10)
+
+ggplot(voteaverage,aes(x =`Documentary Genre`, y =avg, color = `Documentary Genre`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Documentary Genre`, ymin = low, ymax=high)) + geom_boxplot() +
+scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9], col_scale[10])) +
+theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+ylab("Mean Vote Average") +
+ggtitle("Mean Vote Average of Documentary Genres") 
+
+
+   
+popularity<-
+anim_revenue1 %>%
+  transmute(`Documentary Genre`,
+            popularity= abs(`popularity`)) %>%
+  group_by(`Documentary Genre`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(popularity, na.rm=T),
+            se=sd(popularity, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+
+col_scale<-colorRampPalette(c("#0200bd50","#FF000050"))(10)
+
+ggplot(popularity,aes(x =`Documentary Genre`, y =avg, color = `Documentary Genre`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Documentary Genre`, ymin = low, ymax=high)) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  geom_boxplot() +
+  scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9], col_scale[10])) +
+  ylab("Mean Popularity") +
+  ggtitle("Mean Popularity of Documentary Genres") 
+
+revenue<-
+anim_revenue1 %>%
+  transmute(`Documentary Genre`,
+            revenue= abs(`revenue_millions`)) %>%
+  group_by(`Documentary Genre`) %>%
+  dplyr::summarize(n=n(),
+            avg=mean(revenue, na.rm=T),
+            se=sd(revenue, na.rm=T)/sqrt(n),
+            low=avg-2*se,
+            high=avg+2*se
+) 
+col_scale<-colorRampPalette(c("#0200bd50","#FF000050"))(10)
+
+ggplot(revenue,aes(x =`Documentary Genre`, y =avg, color = `Documentary Genre`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Documentary Genre`, ymin = low, ymax=high)) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  geom_boxplot() +
+  scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9], col_scale[10])) +
+  ylab("Mean Revenue in Millions") +
+  ggtitle("Mean Revenue of Documentary Genres")
+
+
+```

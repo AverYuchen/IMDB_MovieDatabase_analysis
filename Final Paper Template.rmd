@@ -1,0 +1,241 @@
+---
+title: "The Movie Database"
+author: "STOR 320.02 Group 19: Iniya Muthukumaren, Reagan Millican, Yirui Huang, Yuchen Bai, Claire Strack"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+#Put Necessary Libraries Here
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(car)
+library(modelr)      
+library(purrr)
+library(broom)
+library(glmnet)
+library(kableExtra)
+library(tidyr)
+library(plotly)
+library("readxl")
+library("RColorBrewer")
+library(boot)
+library(Hmisc)
+
+## data
+load(file="movies_5")
+load(file="movies")
+load(file="movies6")
+load(file="movies_6")
+load(file="revenue")
+load(file="popularity")
+load(file="voteaverage")
+load(file="MOD.RESULT")
+load(file="voteaverage2")
+load(file="revenue2")
+```
+
+# INTRODUCTION
+
+Movies have been one of the most popular forms of entertainment enjoyed by people all over the world for over a century. However, this multi-billion dollar industry is constantly changing and factors such as the Coronavirus pandemic and streaming platforms are making it more difficult for movie theatres to stay afloat. In October 2020, the second-largest movie theater chain in America, Royal, announced that it would close more than 500 theaters across the country due to the pandemic with no plans to reopen them (Chappell 2020). Movie theater companies have also been forced to postpone the release dates of major upcoming films, resulting in plummeting stock prices and diminishing streams of revenue (Sperline et al., 2020).
+
+In order to attract viewers, keep movie theaters open, and to earn the profits that they once did, movie production companies must adjust to the changing times and make strategic decisions regarding the films they produce moving forward. The purpose of our analysis was to explore the factors that lead to the success of a movie. After exploring a dataset of nearly 5000 movies from The Movie Database (TMDB), we decided upon two questions to guide our research:
+
+**Question 1:** How can we predict the profit of a movie?
+
+**Question 2:** Out of the most commercially and critically successful genres, which movie subgenres and production companies performed the best?
+
+Our first question explores the different factors that influence the profit of a movie, so we used variables in the TMDB dataset as well as the new ones we created. The second question stems from our previous exploratory data analysis where we found that the Documentary genre had the highest average vote average and that the Animation genre had the highest average revenue. Since revenue is associated with commercial success and vote average is associated with critical success, we wanted to dive deeper into the success behind these two genres. 
+
+Through our analysis, we wanted to determine which trends in movies have historically been the most lucrative and well-received by audiences. The movie industry needs to maximize its earnings in the coming years to make up for the economic toll that the pandemic has taken. Movies can cost hundreds of millions of dollars to produce and there is no guarantee of financial returns, so strategic decisions must be made to save the industry. By determining the specific factors that can attract a large audience, movie production companies could try to replicate these trends and produce new films with a formula that is proven to be effective. 
+
+
+# DATA
+
+This dataset came from The Movie Database (TMDb), which is an online movie and TV database that community members have been contributing to since 2008. Users can add and edit any missing or incorrect data, which is done in part by syncing data from IMDb. Users also have the ability to rate and favorite movies, as well as add movies to their watchlist. There are currently 1,862,016 registered users on TMDb. It has also been a source for movie metadata that developers working on film-related sites and apps have cited. A strength of TMDb is that it is owned by the public and is not a for-profit site like IMDb, so censorship is less likely to occur. TMDb currently has 596,492 movies, but the TMDb dataset that we pulled from only contained 5,000 movies. 
+
+The original variables we included in our analysis were popularity, runtime, vote average, and vote count. The vote average variable is an average of the vote ratings that users on TMDb have given a certain movie; users can only rate a movie if they have added it to their watchlist. The popularity variable for movies on TMDb comes from the number of votes, views, and favorites that a movie has received, as well as the number of users who have added the movie to their watchlist. In the 5000 movies that were sampled, 20 total movies genres were represented. TMDb has data on movies in 37 different languages. In the production country variable, there were a total of 87 different countries that the sample of 5000 movies were produced in. 
+
+In order to conduct our analyses, we created variables that would allow us to gain greater insight into our questions. The variables that we created and manipulated to use in our analysis were genre, profit, season, decade, production country, original language, documentary subgenres, animation studios, and whether or not the movie was from a top 10 production company. The difference between budget and revenue variables in TMDb was used to find the profit of the movies. For the question of the profit prediction model, we cleaned up the distract characters in each column and reclassified some of the categorical variables. Since each movie had more than one genre in the TMDb data set, we separated the genres variable into 20 different dummy variables. In dummy variables, 0 and 1 represent the absence or presence of a category. In the original dataset, categorical variables such as production countries, production companies and original language all had more than 30 unique values. In order to make the model with concise and accurate categorical variables, we reclassified these categorical variables. Specifically, we categorized production countries into seven continents, assigned production companies to top 10 production companies and other companies and classified original language into top three common languages and other languages based on the value of the dataset. Furthermore, we attempted to study the influence of the season and decade of release in the film market. Therefore, we created these two variables based on the release date in the original dataset.
+
+
+```{r, echo=FALSE, warning=FALSE}
+kable(movies_6[1:30,]) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = T) %>% 
+  scroll_box(width = "100%", height = "300px", fixed_thead = TRUE)
+```
+
+*Table 1. The data we used for the modelling analysis in question 1, which includes both variables from the original dataset as well as variables we created.*
+
+
+In our exploratory data analysis, we found that the genre that had the highest mean revenue was animation and the genre with the highest median vote average was the Documentary genre. In order to better understand the high average revenue of animation movies, we were interested as to whether or not revenue levels related to the animation studio the movie was produced by. We then created an Animation Studios variable that categorized each animation movie by its production company. The top 9 Animation Studios that produced the highest frequency of movies in the sample were included. Since the topics of documentaries within our dataset is diverse, we were interested in investigating whether there was a significant difference in the mean vote average in different categories of documentaries. Accordingly, we created a Documentary genre variable that included ten different documentary categories. 
+
+```{r,echo=FALSE,warning=FALSE}
+movies5_new <- movies5 %>%
+  gather(genre, value, "action", "adventure", "fantasy", 
+         "science_fiction", "crime", "drama", "thriller",
+         "animation", "family", "western", "comedy", 
+         "romance", "horror", "mystery", "war", "history", 
+         "music", "documentary", "foreign", "tvmovie") %>%
+  filter(value == 1)
+
+movies5_new <- movies5_new%>% group_by(genre) %>%
+         mutate(mean_revenue_millions = mean(revenue_millions))
+
+#Related to Documentary and Animation question
+ggplot(movies5_new, 
+       aes(x = reorder(genre,-vote_average,na.rm=TRUE,FUN=median), y = vote_average)) +
+  geom_boxplot(aes(fill=mean_revenue_millions)) +
+  stat_summary(fun.y=mean, colour="darkred", geom="point") +
+  scale_fill_gradient(low=hcl(15,100,75), high=hcl(195,100,75)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(x="Genre",y="Vote average",fill="Mean revenue (millions of dollars)") +
+  ggtitle("Relationship between genres, rating and revenue") 
+```
+
+
+*Figure 1. Boxplots of vote average by genre, where each box plot is shaded according to its mean revenue (millions of dollars).*
+
+
+# RESULTS
+
+### Question 1
+
+Our first question was "How can we predict the profit of a movie?" First, we dropped the descriptive variables -  tagline, title, id, and overview - from the dataset. Then we used standardization to make sure the data was internally consistent; we divided popularity, vote average, vote count,  profit in millions and runtime by corresponding standard deviation so that we could control for differences in scale. Finally, we used runtime, popularity, vote average, vote count, genres, production countries, production companies, original language, decade, season as potential predictors in our initial attempt.
+
+In order to build our model, we utilized regularized regression, which minimizes a penalized version of the sum of squared errors. While classic linear regression seeks to minimize error (specifically the sum of squared errors), regularized linear regression minimized a penalized version of the sum of squared errors. The equation for the penalized sum of squared errors is displayed below. This method allows us to select the model containing the least amount of variables with the best prediction. To determine the best tuning parameters, alpha and lambda, we used cross-validation to determine the best combination of alpha and lambda. The results are displayed in Table 2. The best alpha-lambda combination is alpha = 0.75 and lambda = 0.1894532.
+
+
+\[
+  PSSE
+  = SSE + λ[(1-α)
+  \sum_{i=1}^ρβ_i^2+α
+  \sum_{i=1}^ρ|β_i|]
+\]
+
+*Equation 1. The equation for the penalized sum of squared errors.*
+
+```{r, echo=FALSE, warnings=FALSE}
+kable(MOD.RESULT, col.names = c("Alpha","Lambda","Error")) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = T)
+```
+
+*Table 2. The cross-validation output, showing the best lambda for each alpha, as well as the corresponding error for each alpha-lambda combination.*
+
+Using these tuning parameters, we constructed the following model: profit = 0.03902736  + 0.09757210(popularity) + 0.50167821(vote count) + 0.03655176(adventure genre). This model has a root mean square error of 0.6722897, which indicates a very good fit; the range of profit (millions) in our data is approximately 20 (in millions of dollars). 
+
+```{r,echo=FALSE}
+ggplot(movies_6, aes(x=vote_count,y=profit_millions,size=popularity, color=as.factor(adventure))) +
+  geom_point(alpha=0.3) +
+  labs(size="Popularity value",x="Vote count",y="Profit (millions of dollars)",color="Adventure genre") +
+  #guides(fill=guide_legend(title="New Legend Title"))
+  theme_classic()
+#ggplotly(plot,tooltip = c("popularity","vote_count","profit_millions"))
+```
+
+*Figure 2. A bubble plot of profit (millions of dollars) by vote count, where color reflects whether or not the plotted movie falls within the adventure genre and size reflects the movie’s TMDb popularity value. These variables - vote count, adventure genre, and popularity - were the three predictors of profit included in our final model.*
+
+```{r, echo=FALSE,warnings=FALSE, message=FALSE}
+ggplot(movies6) +
+  geom_histogram(aes(x=profit_millions-profit_millions.hat),fill="lightskyblue2") +
+  theme_minimal() +
+  xlab("Residuals") +
+  ylab("Frequency")
+```
+
+*Figure 3. A histogram of the residuals from running the model we constructed on the entire movies dataset.*
+
+The residual histogram is plotted above, in order to judge the predictability. The closer a residual (observed - predicted profit) is to the zero, the better the prediction. As many of the residuals are positive, we can conclude that the model generally under-predicts profit. The distribution has longer tails than a normal distribution and exhibits mild skewness toward larger, positive residuals. Our prediction is good because most of the residuals were small and closed to 0. We think the model generally under-predicts profit because there are many other factors that we have not considered in our model. Some other potential predictors had a positive significance value for the revenue, but our model did not include them. 
+
+We found that, of the initial predictors, only three - vote count, popularity, and adventure genre - were necessary to predict profit. Since we found that the adventure genre had the second highest revenue in our exploratory analysis (see Figure 1), it was not surprising to find that the adventure genre variable was a useful predictor of profit. Popularity also makes intrinsic sense as a useful predictor of profit. We were surprised to see vote count as a useful predictor of profit. Vote count may reflect the traffic a movie page gets on the TMDb website, and in turn the movie’s popularity, which could explain why this variable was useful in our final model.
+
+
+### Question 2
+
+In prior analyses, out of all the genres, the Documentary genre was found to have the highest mean vote average. For someone interested in producing a documentary, it would be important to understand which specific documentary categories are associated with the highest mean vote average. After examining each of the 110 documentaries and categorizing them, the documentary categories with five or more movies were analyzed to better understand which categories are associated with the highest mean vote average. Due to the various sample sizes of each of the documentary categories, there was only a significant difference in mean vote average between the documentary genres of religion and sports, and between religion and corporation/products. The median line in the boxplots in Figures 4 and 5 is the measure of central tendency we used to compare each documentary genre’s mean vote average and mean revenue. The subgenre Religion had the second lowest median value for mean vote average, whereas the subgenres of sports and corporations/products had the highest median values for mean vote average. Therefore, if a documentary filmmaker was striving to create a critically successful film, it would be better to create a documentary on sports or corporations/products and stay away from documentaries on religion. 
+
+
+```{r,echo=FALSE}
+col_scale<-colorRampPalette(c("#0200bd50","#FF000050"))(10)
+ggplot(voteaverage,aes(x =`Documentary Genre`, y =avg, color = `Documentary Genre`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Documentary Genre`, ymin = low, ymax=high)) + geom_boxplot() +
+scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9], col_scale[10])) +
+theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+ylab("Mean Vote Average") +
+ggtitle("Mean Vote Average of Documentary Genres")
+```
+
+*Figure 4. A confidence interval graph that compares the mean vote average of the animation studios. The middle line in each of the confidence intervals represents the median value taken from boxplots for each animation studios’ mean vote average.*
+
+Those who work in film might want to produce documentaries since this is the genre that was found to have the highest mean vote average, which is an indicator of high critical success. However, revenue is a factor that should still be considered when investing time and money into a documentary film. Therefore, using the documentary categories we created, we wanted to see if there was a significant difference in mean revenue between any of the genres. A significant difference in mean revenue was found between the high mean revenue levels of the comedy genre versus the lower mean revenue levels of the media/entertainment and war documentary categories. Therefore, if a documentary filmmaker was striving to create a film that performed well in the box office, it would be wise to create one in the comedy genre and stay away from documentaries on media/entertainment and war. 
+
+
+```{r,echo=FALSE}
+col_scale<-colorRampPalette(c("#0200bd50","#FF000050"))(10)
+ggplot(revenue,aes(x =`Documentary Genre`, y =avg, color = `Documentary Genre`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Documentary Genre`, ymin = low, ymax=high)) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  geom_boxplot() +
+  scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9], col_scale[10])) +
+  ylab("Mean Revenue in Millions") +
+  ggtitle("Mean Revenue of Documentary Genres")
+```
+
+*Figure 5. A confidence interval graph that compares the mean revenue in millions of the Documentary category. The middle line in each of the confidence intervals represents the median value taken from boxplots for each Documentary category’s mean revenue in millions.*
+
+Using a similar method to how we analyzed the Documentary genre, we examined the Animation genre because it was determined to have the highest commercial success in our exploratory data analysis. For the purpose of our research, we defined commercial success as the greatest average revenue of each of the genres. The median line in the boxplots in Figures 6 and 7 is the measure of central tendency we used to compare each Animation studio’s  mean revenue and mean vote average. Within the Animation category, there were 234 different movies from nine major animation studios. The animation studio that produced movies with the highest median value for mean revenue was Pixar, with Blue Sky Studios following closely behind. Pixar had a significantly higher average revenue than every other studio except Blue Sky. Nickelodeon had the lowest average revenue, which was significantly lower than the revenue of  Sony Pictures, Studio Ghibli, Walt Disney, Dreamworks, Blue Sky, and Pixar.
+
+
+```{r,echo=FALSE}
+col_scale<-colorRampPalette(c("red","orange"))(9)
+ggplot(revenue2,aes(x =`Animation Studios`, y =avg, color = `Animation Studios`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Animation Studios`, ymin = low, ymax=high)) + scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9])) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  ylab("Mean Revenue in Millions") +
+  ggtitle("Mean Revenue of Animation Studios") 
+```
+
+*Figure 6. A confidence interval graph that compares the mean revenue in millions of the Animation Studios. The middle line in each of the confidence intervals represents the median value taken from boxplots for each Animation studio’s mean revenue in millions.*
+
+Due to the relatively small sample sizes for each animation studio, the confidence intervals for predicting mean revenue are large. The largest sample size in the data was for Dreamworks, with 32 movies, from which we predicted with 95% confidence that the mean revenue is between $332.9 million and $498.7 million. Conversely, Studio Ghibli had the least amount of movies in our dataset with only 4, and we predicted that the true mean revenue for this studio, with 95% confidence, is between $132.8 million and $295.4 million. Despite Studio Ghibli having a lower average revenue, the studio produces films with a significantly higher average vote score than most other production companies, with an average user-generated score of 8.05 out of 10. Comparatively, the average score for Dreamworks movies is 6.58 out of 10. Nickelodeon has the lowest average mean score at  5.75 out of 10, significantly lower than the mean scores for Blue Sky, Pixar, Dreamworks, Studio Ghibli, Walt Disney, and Warner Bros.
+
+
+```{r,echo=FALSE}
+col_scale<-colorRampPalette(c("red","orange"))(9)
+ggplot(voteaverage2,aes(x =`Animation Studios`, y =avg, color = `Animation Studios`),inherit.aes = FALSE) + 
+geom_errorbar(aes(x=`Animation Studios`, ymin = low, ymax=high)) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  geom_boxplot() +
+  scale_color_manual(values = c(col_scale[1], col_scale[2], col_scale[3], col_scale[4], col_scale[5], col_scale[6], col_scale[7], col_scale[8], col_scale[9])) +
+  ylab("Mean Vote Average") +
+  ggtitle("Mean Vote Average of Animation Studios") 
+```
+
+*Figure 7. A confidence interval graph that compares the mean vote average of the animation studios. The middle line in each of the confidence intervals represents the median value taken from boxplots for each animation studios’ mean vote average.*
+
+This information would be most useful for movie theaters since it would tell them which movies they should focus on advertising and promoting most heavily. Movie theaters have limited resources for promoting new movies and limited screen time to play trailers, so they could use this information to make informed decisions about the films they advertise. It is especially important for them to promote animated movies since they draw such large audiences of families with children and are more likely to generate higher revenues than other genres. If movie theaters were deciding between which movies to advertise and promote, they would most likely make more revenue from promoting films made by Pixar, Blue Sky, and Dreamworks.
+
+# CONCLUSION
+
+Our goals for this research project were to create a model that predicts the profit of a movie and to determine which Animation studios have demonstrated the most commercial success and which Documentary genres have demonstrated the most critical success. We found that popularity, vote count, and the Adventure movie genre to be useful predictors for profit. The model with these predictors had a good fit, with a root mean square error of approximately 0.67, which is very low considering that the range of profit (millions of dollars) was approximately 20. We found that Documentary movies of the sports and corporation/products genres were found to have the highest mean rating by the TMDb community. Moreover, we found that Animation movies produced by Pixar had the highest mean revenue and that Animation movies produced by Nickelodeon had the lowest mean revenue. 
+
+In the Profit prediction model question, we put 50 variables as potential predictors in the initial model, but only three variables included as influential predictors in the final model. The small amount of variables in our final model was unexpected. Of the initial predictors, popularity and adventure were expected to be associated with profit. Since the Adventure genre was the second most popular and profitable genre out of all the genres, as can be seen in Figure 1, it was not unexpected that the Adventure genre was an influential predictor in the model. We regarded "vote count" as an unusual predictor in our model, because it was a metric that was restricted to TMDb’s users. The vote count variable might make the model biased in predicting profit for the overall movie industry since it is generated by a small portion of the movie-going audience. 
+
+Future analysis should use updated data in order to capture more recent patterns, since our data is three years old. Analyzing more recent data would enable us to make more accurate predictions about factors associated with profit, as well as critical and commercial success. It would also be beneficial to use a different data source to investigate whether or not our findings hold up; our predictors, including vote count and popularity, are specific to the TMDb website, which limited the applicability of our findings. The TMDb website only has about 1 million registered users who directly influence these TMDb-specific predictors, which could have made the data biased since it only reflected the movie preferences of TMDb users. For example, a TMDb user may vote on a movie in a very different manner than the average movie consumer. If future analysis were to use TMDb data, it should include a sample size larger than 5,000 movies, as the TMDb website has over 500,000 movies. In the model for the profit prediction, we only tested 5 alpha using cross-validation output. If we considered more alphas to use for the model, the resulting model may have an even lower error corresponding with a new alpha-lambda combination, and we may have a more accurate model for our final result. Our model generally under-predicts profit and we may consider adding more factors to our model to improve its accuracy.
+
+These results are important because it allows both the movie-going audience, as well as those who work in film to understand which movies would be the best to produce and to invest time and money into watching. Movies are powerful forms of media that allow us to temporarily escape from the stressors of our daily lives, and gain greater insight into the society and culture around us.  Especially now with the economic fallout of the COVID-19 pandemic, it is important for those in the film industry to make strategic decisions about the types of movies they are producing based upon what audiences want to see. With such a versatile form of media, the data analysis that we have performed can allow us to see which specific factors have been associated with the financial, critical, and commercial success of certain movies.
+
+
+# REFERENCES
+Chappell, B. (2020, October 05). Regal Movie Chain Will Close All 536 U.S. Theaters On Thursday. Retrieved November 14, 2020, from https://www.npr.org/
+
+Sperline, N., Friedman, G., & Nelson, E. (2020, October 16). With No New Films, Regal Cinemas Shuts Down Again. Retrieved November 14, 2020, from https://www.nytimes.com/ 
+
+(TMDb), T. (2017, September 28). TMDB 5000 Movie Dataset. Retrieved November 16, 2020, from https://www.kaggle.com/tmdb/tmdb-movie-metadata
+
+TMDb. (n.d.). Retrieved November 16, 2020, from https://www.themoviedb.org/?language=en-US
+
